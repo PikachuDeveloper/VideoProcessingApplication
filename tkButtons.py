@@ -1,9 +1,9 @@
 import tkinter as tk
 import cv2
 import matplotlib.pyplot as plt
-from IPython.display import clear_output
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.widgets import RectangleSelector
+
 
 class App:
     def __init__(self, vidpath):
@@ -12,12 +12,11 @@ class App:
         self.framenum = 1
         self.roi = None
         self.fig, self.ax = plt.subplots()
-        self.root = tk.Tk()
+        # self.root = tk.Tk()
         self.button()
 
     def button(self):
-        bar1 = FigureCanvasTkAgg(self.fig, self.root)
-        bar1.get_tk_widget().pack()
+        # bar1 = FigureCanvasTkAgg(self.fig, self.root)
         b1 = tk.Button(text="Next",
                        width=15, height=3)
         b1.config(command=self.next)
@@ -26,7 +25,7 @@ class App:
         b2.config(command=self.prev)
         b1.pack()
         b2.pack()
-        rect = RectangleSelector(self.ax, self.line_select_callback,
+        RectangleSelector(self.ax, self.line_select_callback,
                           drawtype='box', useblit=True,
                           button=[1, 3],  # disable middle button
                           minspanx=5, minspany=5,
@@ -56,7 +55,7 @@ class App:
             _, self.frame = self.vid.read()
             self.framenum += 1
             plt.clf()
-            clear_output(wait=True)
+            # clear_output(wait=True)
             self.draw()
         except Exception as e:
             print(e)
@@ -67,10 +66,10 @@ class App:
         """
         try:
             self.framenum = max(1, self.framenum - 1)
-            self.vid.set(cv2.CAP_PROP_POS_FRAMES, self.framenum - 1)
+            self.vid.set(cv2.CAP_PROP_POS_FRAMES, self.framenum)
             _, self.frame = self.vid.read()
             plt.clf()
-            clear_output(wait=True)
+            # clear_output(wait=True)
             self.draw()
         except Exception as e:
             print(self.framenum, e)
@@ -85,11 +84,11 @@ class App:
         plt.imshow(self.frame)
         plt.title('frameNumber ' + str(self.framenum))
         plt.show()
-        if flag:
-            self.root.mainloop()
+        # if flag:
+        #     self.root.mainloop()
 
 
 video = 'E:\\work\\3-38_3-52.mp4'
 
 app = App(video)
-
+app.vid.release()
