@@ -1,96 +1,108 @@
 import cv2
 
-# Drawing rect to define the roiRect
-drawingRect = None
 
-# ROI coordinates (x0, y0), (x1, y1) of the top left and bottom right corners
-roiRect = None
-img = 0
-initVideo = None
+class App:
+    def __init__(self, video, w0=1880, h0=1021):
+        # Drawing rect to define the roiRect
+        self.drawingRect = None
+        self.vid = cv2.VideoCapture(video)
+        self.windowName = 'image'
+        self.trTitle = 'tracker'
+        self.trackerPos = 0
+        self.w0, self.h0 = h0, w0
+        _, self.frame = self.vid.read()
+        # ROI coordinates (x0, y0), (x1, y1) of the top left and bottom right corners
+        self.roiRect = []
+        self.initVideo = None
+        self.start()
 
-
-def setRoi(event, x, y, flags, params):
-    """Mouse callback to set ROI
-
-	event  - mouse event
-	x: int  - x coordinate
-	x: int  - y coordinate
-	flags  - additional flags
-	params - extra parameters
-	"""
-    global drawingRect, roiRect, img, initVideo
-    frame = img.copy()
-    if event == cv2.EVENT_LBUTTONDOWN:
-        drawingRect = [(x, y), (x, y)]
-    # print('\nStrting drawingRect: ', drawingRect)
-    elif event == cv2.EVENT_LBUTTONUP:
-        pTL = (min(drawingRect[0][0], drawingRect[1][0]), min(drawingRect[0][1], drawingRect[1][1]))
-        pBR = (max(drawingRect[0][0], drawingRect[1][0]), max(drawingRect[0][1], drawingRect[1][1]))
-        drawingRect = None
-        # Set the roiRect or reset it
-        if pTL != pBR or roiRect:
-            initVideo = True  # Init video output
-        if pTL != pBR:
-            # Adjust to X px padding
-            pxBlock = 8
-            dx = (pBR[0] - pTL[0]) % pxBlock
-            if dx:
-                dx = pxBlock - dx
-            dy = (pBR[1] - pTL[1]) % pxBlock
-            if dy:
-                dy = pxBlock - dy
-            roiRect = (pTL, (pBR[0] + dx, pBR[1] + dy))
-        # print('\nROI size is corrected by ({}, {}): ({}, {})'.format(dx, dy, roiRect[1][0]-roiRect[0][0], roiRect[1][1]-roiRect[0][1]))
+    def start(self):
+        cv2.namedWindow(self.windowName, cv2.WINDOW_NORMAL)
+        h, w = self.frame.shape[:2]
+        # h2h = h / self.h0
+        # w2w = w / self.w0
+        if h / self.h0 > w / self.w0:
+            cv2.resizeWindow(self.windowName, int(w * self.h0 / h), self.h0)
         else:
-            roiRect = None
+            cv2.resizeWindow(self.windowName, self.w0, int(h * self.w0 / w))
+        img = self.frame.copy()
 
-    if event == cv2.EVENT_RBUTTONUP:
-        drawingRect = None
-        roiRect = None
-
-    if event == cv2.EVENT_MOUSEMOVE and drawingRect:
-        drawingRect[1] = (x, y)
-
-    drawRoi(img, cv2.getTrackbarPos('slider', windowName))
+        cv2.imshow(self.windowName, img)
+        cv2.createTrackbar(self.trTitle, self.windowName, 0,
+                           int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT)) - 1, self.on_change)
+        cv2.setMouseCallback(self.windowName, self.setRoi)
+        cv2.waitKey(0)
 
 
-def drawRoi(frame, pos):
-    img = frame.copy()
-    cv2.putText(img, str(pos), (0, img.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 4)
-    if roiRect or drawingRect:
-        rc = drawingRect if drawingRect else roiRect
-        rt = max(1, int(w / w0) + 1)
-        img = cv2.rectangle(img, rc[0], rc[1], (0, 255, 0), rt)
-    cv2.imshow(windowName, img)
+    def setRoi(self, event, x, y, flags, params):
+        """Mouse callback to set ROI
 
-def on_change(val):
-    vid.set(cv2.CAP_PROP_POS_FRAMES, int(val))
-    _, img = vid.read()
-    if drawingRect:
-        img = img.copy()  # Copy image to not draw in over the original frame
-    drawRoi(img, val)
+        event  - mouse event
+        x: int  - x coordinate
+        x: int  - y coordinate
+        flags  - additional flags
+        params - extra parameters
+        """
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawingRect = [(x, y), (x, y)]
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            pTL = (min(self.drawingRect[0][0], self.drawingRect[1][0]),
+                   min(self.drawingRect[0][1], self.drawingRect[1][1]))
+
+            pBR = (max(self.drawingRect[0][0], self.drawingRect[1][0]),
+                   max(self.drawingRect[0][1], self.drawingRect[1][1]))
+            self.drawingRect = None
+            # Set the roiRect or reset it
+            if pTL != pBR or self.roiRect:
+                self.initVideo = True  # Init video output
+            if pTL != pBR:
+                # Adjust to X px padding
+                pxBlock = 8
+                dx = (pBR[0] - pTL[0]) % pxBlock
+                if dx:
+                    dx = pxBlock - dx
+                dy = (pBR[1] - pTL[1]) % pxBlock
+                if dy:
+                    dy = pxBlock - dy
+                self.roiRect.append((pTL, (pBR[0] + dx, pBR[1] + dy)))
+
+            else:
+                self.roiRect = self.roiRect[:-1]
+
+        if event == cv2.EVENT_RBUTTONUP:
+            self.drawingRect = None
+            self.roiRect = self.roiRect[:-1]
+
+        if event == cv2.EVENT_MOUSEMOVE and self.drawingRect:
+            self.drawingRect[1] = (x, y)
+
+        self.drawRoi()
 
 
-vid = cv2.VideoCapture('E:\\work\\100testimages.mp4') #7-02_7-09
-windowName = 'image'
-total = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
-_, frame = vid.read()
-# cv2.namedWindow(windowName) #, cv2.WINDOW_AUTOSIZE)
-# _, _, w0, h0 = cv2.getWindowImageRect(windowName)
-cv2.namedWindow(windowName,
-                cv2.WINDOW_NORMAL)  # Create window with freedom of dimensions                    # Read image
-h, w = frame.shape[:2]
-w0, h0 = (1880, 1021)
-h2h = frame.shape[0] / h0
-w2w = frame.shape[1] / w0
-if h2h > w2w:
-    cv2.resizeWindow(windowName, int(frame.shape[1] / h2h), h0)
-else:
-    cv2.resizeWindow(windowName, w0, int(frame.shape[0] / w2w))
-img = frame.copy()
-cv2.imshow(windowName, img)
-cv2.createTrackbar('slider', windowName, 0, total, on_change)
-cv2.setMouseCallback(windowName, setRoi)
+    def drawRoi(self):
+        img = self.frame.copy() # Copy image to not draw in over the original frame
+        cv2.putText(img, str(self.trackerPos + 1), (0, img.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 4)
+        if self.roiRect or self.drawingRect:
+            rcs = self.roiRect + [self.drawingRect] if self.drawingRect else self.roiRect
+            rt = max(1, int(img.shape[1] / self.w0) + 1)
+            for rc in rcs:
+                img = cv2.rectangle(img, rc[0], rc[1], (0, 255, 0), rt)
+        cv2.imshow(self.windowName, img)
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+
+    def on_change(self, val):
+        self.trackerPos = val
+        self.vid.set(cv2.CAP_PROP_POS_FRAMES, int(val))
+        _, self.frame = self.vid.read()
+        self.drawRoi()
+
+    def end(self):
+        cv2.destroyAllWindows()
+        self.vid.release()
+
+
+if __name__ == '__main__':
+
+    video = 'E:\\work\\100testimages.mp4'
+    App(video) #.end()
