@@ -1,6 +1,7 @@
 import cv2
 from tkinter import *
 from videoMask import roi_processing
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
 class App:
@@ -10,7 +11,7 @@ class App:
         self.roiRect = []  # ROI coordinates (x0, y0), (x1, y1) of the top left and bottom right corners
 
         # ----------------OpenCV GUI block-----------------------
-        self.w0, self.h0 = h0, w0
+        self.w0, self.h0 = w0, h0
         self.vidpath = video
         self.vid = cv2.VideoCapture(video)
         _, self.frame = self.vid.read()
@@ -24,9 +25,10 @@ class App:
         self.rowFrames = []
         self.fName = None
         self.bg = None
-        self.begin()
+        self.shape = None
+        self.begin(w0, h0)
 
-    def begin(self):
+    def begin(self, w0, h0):
         """
         Starts
         + frame showing
@@ -36,10 +38,10 @@ class App:
         """
         cv2.namedWindow(self.windowName, cv2.WINDOW_NORMAL)
         h, w = self.frame.shape[:2]
-        if h / self.h0 > w / self.w0:
-            cv2.resizeWindow(self.windowName, int(w * self.h0 / h), self.h0)
+        if h / h0 > w / w0:
+            cv2.resizeWindow(self.windowName, int(w * h0 / h), h0)
         else:
-            cv2.resizeWindow(self.windowName, self.w0, int(h * self.w0 / w))
+            cv2.resizeWindow(self.windowName, self.w0, int(h * w0 / w))
 
         self.drawRoi(True)
         cv2.createTrackbar(self.trTitle, self.windowName, 0,
@@ -84,7 +86,7 @@ class App:
 
         if event == cv2.EVENT_RBUTTONUP:
             """
-            Delete drawn ROI by clicking inside it's area from thE parent and child window
+            Delete drawn ROI by clicking inside it's area from the parent and child window
             """
             self.drawingRect = None
 
@@ -133,8 +135,11 @@ class App:
         cv2.imshow(self.windowName, img)
 
     def createWidget(self):
+        """
+        Creates child window
+        """
         self.window = Tk()
-        self.wFrame = Frame(self.window)
+        self.wFrame = LabelFrame(self.window, text="ROIs", padx=30, pady=10)
         self.wFrame.pack(side="top", fill="x")
 
         rowFrame = Frame(self.window)
@@ -142,16 +147,20 @@ class App:
         self.bg = StringVar(rowFrame)
         self.bg.set("color")  # default value
 
-        rowFrame.pack(side="bottom", fill="x")
-        Button(rowFrame, text="Accept", font=('Helvetica bold', 10), command=self.accept).pack(
-            padx=4, pady=4, side="left")
-        Button(rowFrame, text="Cancel", font=('Helvetica bold', 10), command=self.end, padx=8, pady=4).pack(
-            padx=4, pady=4, side="right")
-
-        rowFrame = Frame(self.window)
-        rowFrame.pack(side="bottom", fill="x")
         Label(rowFrame, text="Random background:", font=('Calibri 12')).pack(side="left")
         OptionMenu(rowFrame, self.bg, *["color", "pixel static", "pixel dynamic"]).pack(side="left", padx=8)
+        rowFrame.pack(side="bottom", fill="x")
+        Button(rowFrame, text="Cancel", font=('Helvetica bold', 10), command=self.end, padx=8, pady=4).pack(
+            padx=4, pady=4, side="right")
+        Button(rowFrame, text="Accept", font=('Helvetica bold', 10), command=self.accept, padx=8, pady=4).pack(
+            padx=4, pady=4, side="right")
+
+        self.shape = IntVar()
+        self.shape.set(1)
+        rowFrame = LabelFrame(self.window, text="ROI shape", padx=30, pady=10)
+        rowFrame.pack(side="bottom", fill="x")
+        Radiobutton(rowFrame, text='rectangle', variable=self.shape, value=0).pack(anchor=W)
+        Radiobutton(rowFrame, text='ellipse', variable=self.shape, value=1).pack(anchor=W)
 
         rowFrame = Frame(self.window)
         rowFrame.pack(side="bottom", fill="x")
@@ -159,8 +168,6 @@ class App:
         self.fName = Entry(rowFrame, font=('Calibri 12'))
         self.fName.insert(0, ".mp4")
         self.fName.pack(side="left", padx=8)
-        # Label(rowFrame, text="You may do the customization of the mask before accepting",
-        # font=('Calibri 12')).pack(side="left", padx=8)
 
         self.updateWidget()
 
@@ -195,19 +202,23 @@ class App:
         self.window.mainloop()
 
     def accept(self):
+        """
+        Accept information and call function to mask a video
+        """
         rois = []
+        shape = ";ellipse" if self.shape.get() else ''
         for i, row in enumerate(self.rowFrames):
             roiRect = self.roiRect[i]
-            rois.append("%i,%i,%i,%i^%s!%s" % (roiRect[0][0], roiRect[0][1],
-                                                   roiRect[1][0] - roiRect[0][0],
-                                                   roiRect[1][1] - roiRect[0][1],
-                                                   row.winfo_children()[-3].get(), row.winfo_children()[-1].get()))
-        # self.bg = self.bg.get()
-        if "pixel" in self.bg.get():
-            static = "dynamic" in self.bg.get()
-            roi_processing(self.vidpath, rois, self.fName.get(), rand=True)
-        else:
-            roi_processing(self.vidpath, rois, self.fName.get(), color=None)
+            rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
+                                                 roiRect[1][0] - roiRect[0][0],
+                                                 roiRect[1][1] - roiRect[0][1],
+                                                 shape,
+                                                 row.winfo_children()[-3].get(),
+                                                 row.winfo_children()[-1].get()))
+
+        rand = "pixel" in self.bg.get()
+        static = "static" in self.bg.get()
+        roi_processing(self.vidpath, rois, self.fName.get(), rand=rand, static=static, color=None)
         self.end()
 
     def trackbar(self, val):
@@ -227,5 +238,13 @@ class App:
 
 
 if __name__ == '__main__':
-    video = 'E:\\work\\100testimages.mp4'
-    App(video)  # .end()
+    parser = ArgumentParser(description='Document Taxonomy Builder.',
+                            formatter_class=ArgumentDefaultsHelpFormatter,
+                            conflict_handler='resolve')
+    parser.add_argument('-v', '--video', type=str, help='path to video')
+
+    parser.add_argument('-wsize', type=str, default="1600x1200", help='Your screen parameters WxH')
+    opt = parser.parse_args("-v E:\\work\\11-23_11-34.mp4".split())
+
+    w, h = opt.wsize.split('x')
+    App(opt.video, int(w), int(h))
