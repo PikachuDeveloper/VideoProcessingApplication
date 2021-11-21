@@ -1,4 +1,4 @@
-#!AppData\Local\Programs\Python\Python39\python.exe
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 :Description: GUI to create ROI's and mask the video.
@@ -7,11 +7,17 @@
 :Date: 2021-11-21
 """
 import cv2
+import sys
+import json
+from pathlib import Path
 from tkinter import *
 from videoMask import roi_processing
 from random import choice, seed, randint
 from datetime import datetime
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+
+FILE = Path(__file__).absolute()
+# sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
 
 
 class App:
@@ -246,24 +252,39 @@ class App:
         shape = ";ellipse" if self.shape.get() else ''
         now = datetime.now()
         seed(now.hour + now.minute + now.second)
-        for i, row in enumerate(self.rowFrames):
-            scale = choice((1.5, 1.7))
-            (x1, y1), (x2, y2) = self.roiRect[i]
-            w = int(scale * (x2 - x1))
-            h = int(scale * (y2 - y1))
-            x_bias = randint(0, min(x1, w - x2 + x1))
-            y_bias = randint(0, min(y1, h - y2 + y1))
-            top = y1 - y_bias + 3
-            left = x1 - x_bias + 3
-            # rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
-            #                                      roiRect[1][0] - roiRect[0][0],
-            #                                      roiRect[1][1] - roiRect[0][1],
-            rois.append("%i,%i,%i,%i%s^%s!%s" % (left, top, w, h, shape,
-                                                 int(row.winfo_children()[-3].get()) + 1,
-                                                 int(row.winfo_children()[-1].get()) + 1))
+
+        save_dir = Path('roi_saved')
+        if not save_dir.exists():
+            save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+        save_js = str(save_dir / self.vidpath.rstrip('mp4'))
+        while Path(save_js + 'json').exists():
+            save_js += '_'
+
+        with open(save_js + 'json', 'w') as f:
+            for i, row in enumerate(self.rowFrames):
+                scale = choice((1.5, 1.7))
+                (x1, y1), (x2, y2) = self.roiRect[i]
+                json.dump({"ROI": self.roiRect[i],
+                           "interval": [int(row.winfo_children()[-3].get()) + 1,
+                                        int(row.winfo_children()[-1].get()) + 1]
+                           }, f)
+
+                w = int(scale * (x2 - x1))
+                h = int(scale * (y2 - y1))
+                x_bias = randint(0, min(x1, w - x2 + x1))
+                y_bias = randint(0, min(y1, h - y2 + y1))
+                top = y1 - y_bias + 3
+                left = x1 - x_bias + 3
+                # rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
+                #                                      roiRect[1][0] - roiRect[0][0],
+                #                                      roiRect[1][1] - roiRect[0][1],
+                rois.append("%i,%i,%i,%i%s^%s!%s" % (left, top, w, h, shape,
+                                                     int(row.winfo_children()[-3].get()) + 1,
+                                                     int(row.winfo_children()[-1].get()) + 1))
 
         rand = "pixel" in self.bg.get()
         static = "static" in self.bg.get()
+
         roi_processing(self.vidpath, rois, self.fName.get(), rand=rand, static=static, color=None)
         self.end()
 
@@ -301,7 +322,7 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--video', type=str, help='path to video')
 
     parser.add_argument('-wsize', type=str, default="1600x1200", help='Your screen parameters WxH')
-    opt = parser.parse_args() #"-v E:\\work\\4-16_5-11.mp4".split())
+    opt = parser.parse_args("-v E:\\work\\7-02_7-09.mp4".split())
     # The list of already masked intervals
     # 4-16_5-11
     # 5-30_6-03
