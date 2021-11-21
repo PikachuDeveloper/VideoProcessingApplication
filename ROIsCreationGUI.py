@@ -1,3 +1,11 @@
+#!AppData\Local\Programs\Python\Python39\python.exe
+# -*- coding: utf-8 -*-
+"""
+:Description: GUI to create ROI's and mask the video.
+
+:Author: (c) Valentyna Pryhodiuk <vpryhodiuk@lumais.com>
+:Date: 2021-11-21
+"""
 import cv2
 from tkinter import *
 from videoMask import roi_processing
