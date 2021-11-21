@@ -22,14 +22,14 @@ class App:
         self.trackerPos = 0
 
         # ----------------Tkinter block---------------------------
-        self.window = None
-        self.wFrame = None
-        self.rowFrames = []
-        self.fName = None
-        self.bg = None
-        self.shape = None
-        self.custom = None
-        self.go2 = None
+        self.window = None  # child box
+        self.wFrame = None  # frame in the child box
+        self.rowFrames = []  # rows of wFrame with necessary intervals
+        self.fName = None  # holds name of the Video to produce
+        self.bg = None  # holds the chosen variant of coloring the background
+        self.shape = None  # holds the chosen variant of ROI's shape
+        self.custom = None  # if true then ROI should be changed on each frame (in progress)
+        self.go2 = None  # holds the chosen parameter of the jump
         self.begin(w0, h0)
 
     def begin(self, w0, h0):
@@ -42,6 +42,8 @@ class App:
         """
         cv2.namedWindow(self.windowName, cv2.WINDOW_NORMAL)
         h, w = self.frame.shape[:2]
+
+        # dummy resizing in context of smart scaling. But is still dummy
         if h / h0 > w / w0:
             cv2.resizeWindow(self.windowName, int(w * h0 / h), h0)
         else:
@@ -113,8 +115,7 @@ class App:
     def drawRoi(self, flag=False):
         """
         Draws the set ROI and calls tkWidget function to change info in the child box
-        :param flag: helping tool to understand if it is necessary to add drawn ROIs to the child box
-        :return:
+        flag (bool): helping tool to understand if it is necessary to add drawn ROIs to the child box
         """
         img = self.frame.copy()  # Copy image to not draw in over the original frame
         cv2.putText(img, str(self.trackerPos), (0, 35),
@@ -169,16 +170,17 @@ class App:
             padx=4, pady=4, side="right")
         Button(rowFrame, text="Previous", font=('Helvetica bold', 10), command=lambda: self.jump_to(-1), padx=8,
                pady=4).pack(padx=4, pady=4, side="left")
-        Button(rowFrame, text="Next", font=('Helvetica bold', 10), command=lambda: self.jump_to(1), padx=8, pady=4).pack(
+        Button(rowFrame, text="Next", font=('Helvetica bold', 10), command=lambda: self.jump_to(1), padx=8,
+               pady=4).pack(
             padx=4, pady=4, side="left")
 
         rowFrame = Frame(self.window)
         rowFrame.pack(side="bottom", fill="x")
         Label(rowFrame, text="Go to:", font=('Calibri 12')).pack(side="left")
         Entry(rowFrame, width=4, font=('Calibri 15 bold'), textvariable=self.go2).pack(side="left", padx=(0, 10))
-        Button(rowFrame, text="Jump", font=('Helvetica bold', 10), command=lambda: self.jump_to(int(self.go2.get() - self.trackerPos)), padx=8,
+        Button(rowFrame, text="Jump", font=('Helvetica bold', 10),
+               command=lambda: self.jump_to(int(self.go2.get() - self.trackerPos)), padx=8,
                pady=4).pack(padx=4, pady=4, side="left")
-
 
         rowFrame = LabelFrame(self.window, text="ROI shape", padx=30, pady=10)
         rowFrame.pack(side="bottom", fill="x")
@@ -236,7 +238,6 @@ class App:
         shape = ";ellipse" if self.shape.get() else ''
         now = datetime.now()
         seed(now.hour + now.minute + now.second)
-        scale = choice((1.414, 1.58, 1.7))  # close to square roots of 2, 2.5 and 3
         for i, row in enumerate(self.rowFrames):
             scale = choice((1.5, 1.7))
             (x1, y1), (x2, y2) = self.roiRect[i]
@@ -261,19 +262,25 @@ class App:
     def trackbar(self, val):
         """
         If trackbar changes position the new frame is shown on the screen
-        :param val: new trackbar position
+        val (str): new trackbar position
         """
         self.trackerPos = val
         self.vid.set(cv2.CAP_PROP_POS_FRAMES, int(val))
         _, self.frame = self.vid.read()
         self.drawRoi()
 
-    def jump_to(self, flag):
-        if 0 <= int(self.trackerPos) + flag <= int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT)) - 1:
-            cv2.setTrackbarPos(self.trTitle, self.windowName, int(self.trackerPos) + flag)
-            # self.trackbar(int(self.trackerPos) + flag)
+    def jump_to(self, step):
+        """
+        Jumps to the frame № current + step
+        step (int): (can be negative)
+        """
+        if 0 <= int(self.trackerPos) + step <= int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT)) - 1:
+            cv2.setTrackbarPos(self.trTitle, self.windowName, int(self.trackerPos) + step)
 
     def end(self):
+        """
+        Safe closing of all windows
+        """
         cv2.destroyAllWindows()
         self.window.destroy()
         self.vid.release()
@@ -287,7 +294,11 @@ if __name__ == '__main__':
 
     parser.add_argument('-wsize', type=str, default="1600x1200", help='Your screen parameters WxH')
     opt = parser.parse_args()
+    # The list of already masked intervals
+    # 4-16_5-11
     # 5-30_6-03
+    # 6-00_6-31
+    # 6-33_6-53
     # 11-23_11-34
     w, h = opt.wsize.split('x')
     App(opt.video, int(w), int(h))
