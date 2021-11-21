@@ -1,6 +1,8 @@
 import cv2
 from tkinter import *
 from videoMask import roi_processing
+from random import choice, seed, randint
+from datetime import datetime
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
@@ -26,6 +28,8 @@ class App:
         self.fName = None
         self.bg = None
         self.shape = None
+        self.custom = None
+        self.go2 = None
         self.begin(w0, h0)
 
     def begin(self, w0, h0):
@@ -63,7 +67,10 @@ class App:
             self.drawingRect = [(x, y), (x, y)]
 
         elif event == cv2.EVENT_LBUTTONUP:
+            if not self.drawingRect:
+                return 0  # if person stops drawing clicking R button, but then releases L button
             flag = True
+
             pTL = (min(self.drawingRect[0][0], self.drawingRect[1][0]),
                    min(self.drawingRect[0][1], self.drawingRect[1][1]))
 
@@ -88,12 +95,15 @@ class App:
             """
             Delete drawn ROI by clicking inside it's area from the parent and child window
             """
-            self.drawingRect = None
-
-            for i, ((x1, y1), (x2, y2)) in enumerate(self.roiRect):
-                if x1 <= x <= x2 and y1 <= y <= y2:
-                    self.roiRect.remove(((x1, y1), (x2, y2)))
-                    self.rowFrames.pop(i).destroy()
+            if self.drawingRect:
+                self.drawingRect = None
+            else:
+                for i, ((x1, y1), (x2, y2)) in enumerate(self.roiRect):
+                    row = self.rowFrames[i]
+                    if x1 <= x <= x2 and y1 <= y <= y2 and int(
+                            row.winfo_children()[-3].get()) <= self.trackerPos <= int(row.winfo_children()[-1].get()):
+                        self.roiRect.remove(((x1, y1), (x2, y2)))
+                        self.rowFrames.pop(i).destroy()
 
         if event == cv2.EVENT_MOUSEMOVE and self.drawingRect:
             self.drawingRect[1] = (x, y)
@@ -142,25 +152,40 @@ class App:
         self.wFrame = LabelFrame(self.window, text="ROIs", padx=30, pady=10)
         self.wFrame.pack(side="top", fill="x")
 
+        # set correct variables responsible for some parameters
         rowFrame = Frame(self.window)
         rowFrame.pack(side="bottom", fill="x")
         self.bg = StringVar(rowFrame)
-        self.bg.set("color")  # default value
+        self.bg.set("pixel static")  # default value
+        self.custom = IntVar()
+        self.shape = IntVar()
+        self.go2 = IntVar()
+        self.shape.set(0)
 
-        Label(rowFrame, text="Random background:", font=('Calibri 12')).pack(side="left")
-        OptionMenu(rowFrame, self.bg, *["color", "pixel static", "pixel dynamic"]).pack(side="left", padx=8)
         rowFrame.pack(side="bottom", fill="x")
         Button(rowFrame, text="Cancel", font=('Helvetica bold', 10), command=self.end, padx=8, pady=4).pack(
             padx=4, pady=4, side="right")
         Button(rowFrame, text="Accept", font=('Helvetica bold', 10), command=self.accept, padx=8, pady=4).pack(
             padx=4, pady=4, side="right")
+        Button(rowFrame, text="Previous", font=('Helvetica bold', 10), command=lambda: self.jump_to(-1), padx=8,
+               pady=4).pack(padx=4, pady=4, side="left")
+        Button(rowFrame, text="Next", font=('Helvetica bold', 10), command=lambda: self.jump_to(1), padx=8, pady=4).pack(
+            padx=4, pady=4, side="left")
 
-        self.shape = IntVar()
-        self.shape.set(1)
+        rowFrame = Frame(self.window)
+        rowFrame.pack(side="bottom", fill="x")
+        Label(rowFrame, text="Go to:", font=('Calibri 12')).pack(side="left")
+        Entry(rowFrame, width=4, font=('Calibri 15 bold'), textvariable=self.go2).pack(side="left", padx=(0, 10))
+        Button(rowFrame, text="Jump", font=('Helvetica bold', 10), command=lambda: self.jump_to(int(self.go2.get() - self.trackerPos)), padx=8,
+               pady=4).pack(padx=4, pady=4, side="left")
+
+
         rowFrame = LabelFrame(self.window, text="ROI shape", padx=30, pady=10)
         rowFrame.pack(side="bottom", fill="x")
-        Radiobutton(rowFrame, text='rectangle', variable=self.shape, value=0).pack(anchor=W)
-        Radiobutton(rowFrame, text='ellipse', variable=self.shape, value=1).pack(anchor=W)
+        Radiobutton(rowFrame, text='rectangle', variable=self.shape, value=0).pack(side="left", anchor=W)
+        Radiobutton(rowFrame, text='ellipse', variable=self.shape, value=1).pack(side="left", anchor=W)
+        OptionMenu(rowFrame, self.bg, *["color", "pixel static", "pixel dynamic"]).pack(side="right", padx=8)
+        Label(rowFrame, text="Random background:", font=('Calibri 12')).pack(side="right")
 
         rowFrame = Frame(self.window)
         rowFrame.pack(side="bottom", fill="x")
@@ -168,6 +193,8 @@ class App:
         self.fName = Entry(rowFrame, font=('Calibri 12'))
         self.fName.insert(0, ".mp4")
         self.fName.pack(side="left", padx=8)
+        Checkbutton(rowFrame, text='random ROI scale per frame', variable=self.custom, onvalue=1, offvalue=0, padx=15,
+                    pady=10).pack()
 
         self.updateWidget()
 
@@ -193,7 +220,7 @@ class App:
         label.append(Entry(rowFrame, width=4, font=('Calibri 15 bold')))
 
         label[0].pack(side="left", padx=(0, 40))
-        label[2].insert(0, '0')
+        label[2].insert(0, str(self.trackerPos))
         label[4].insert(0, str(int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT)) - 1))
         for i in range(1, len(label)):
             label[i].pack(side="left")
@@ -207,14 +234,24 @@ class App:
         """
         rois = []
         shape = ";ellipse" if self.shape.get() else ''
+        now = datetime.now()
+        seed(now.hour + now.minute + now.second)
+        scale = choice((1.414, 1.58, 1.7))  # close to square roots of 2, 2.5 and 3
         for i, row in enumerate(self.rowFrames):
-            roiRect = self.roiRect[i]
-            rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
-                                                 roiRect[1][0] - roiRect[0][0],
-                                                 roiRect[1][1] - roiRect[0][1],
-                                                 shape,
-                                                 row.winfo_children()[-3].get(),
-                                                 row.winfo_children()[-1].get()))
+            scale = choice((1.5, 1.7))
+            (x1, y1), (x2, y2) = self.roiRect[i]
+            w = int(scale * (x2 - x1))
+            h = int(scale * (y2 - y1))
+            x_bias = randint(0, min(x1, w - x2 + x1))
+            y_bias = randint(0, min(y1, h - y2 + y1))
+            top = y1 - y_bias + 3
+            left = x1 - x_bias + 3
+            # rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
+            #                                      roiRect[1][0] - roiRect[0][0],
+            #                                      roiRect[1][1] - roiRect[0][1],
+            rois.append("%i,%i,%i,%i%s^%s!%s" % (left, top, w, h, shape,
+                                                 int(row.winfo_children()[-3].get()) + 1,
+                                                 int(row.winfo_children()[-1].get()) + 1))
 
         rand = "pixel" in self.bg.get()
         static = "static" in self.bg.get()
@@ -231,6 +268,11 @@ class App:
         _, self.frame = self.vid.read()
         self.drawRoi()
 
+    def jump_to(self, flag):
+        if 0 <= int(self.trackerPos) + flag <= int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT)) - 1:
+            cv2.setTrackbarPos(self.trTitle, self.windowName, int(self.trackerPos) + flag)
+            # self.trackbar(int(self.trackerPos) + flag)
+
     def end(self):
         cv2.destroyAllWindows()
         self.window.destroy()
@@ -244,7 +286,8 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--video', type=str, help='path to video')
 
     parser.add_argument('-wsize', type=str, default="1600x1200", help='Your screen parameters WxH')
-    opt = parser.parse_args("-v E:\\work\\11-23_11-34.mp4".split())
-
+    opt = parser.parse_args()
+    # 5-30_6-03
+    # 11-23_11-34
     w, h = opt.wsize.split('x')
     App(opt.video, int(w), int(h))
