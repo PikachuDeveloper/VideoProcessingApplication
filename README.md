@@ -3,8 +3,8 @@ GUI developed to create ROIs and mask the video using videoMask.py
 
 
 Author: (c) Valentyna Pryhodiuk <vpryhodiuk@lumais.com>
-Date: 2021-11-21
 
+Date: 2021-11-21
 
 ## Usage
 ```
