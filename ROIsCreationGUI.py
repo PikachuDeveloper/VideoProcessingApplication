@@ -7,17 +7,15 @@
 :Date: 2021-11-21
 """
 import cv2
-import sys
+import os
 import json
 from pathlib import Path
 from tkinter import *
 from videoMask import roi_processing
 from random import choice, seed, randint
 from datetime import datetime
+from tkinter.filedialog import askopenfilename
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-
-FILE = Path(__file__).absolute()
-# sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
 
 
 class App:
@@ -185,8 +183,7 @@ class App:
         Button(rowFrame, text="Previous", font=('Helvetica bold', 10), command=lambda: self.jump_to(-1), padx=8,
                pady=4).pack(padx=4, pady=4, side="left")
         Button(rowFrame, text="Next", font=('Helvetica bold', 10), command=lambda: self.jump_to(1), padx=8,
-               pady=4).pack(
-            padx=4, pady=4, side="left")
+               pady=4).pack(padx=4, pady=4, side="left")
 
         rowFrame = Frame(self.window)
         rowFrame.pack(side="bottom", fill="x")
@@ -195,6 +192,8 @@ class App:
         Button(rowFrame, text="Jump", font=('Helvetica bold', 10),
                command=lambda: self.jump_to(int(self.go2.get() - self.trackerPos)), padx=8,
                pady=4).pack(padx=4, pady=4, side="left")
+        Button(rowFrame, text="Download", font=('Helvetica bold', 10), command=self.download, padx=8,
+               pady=4).pack(padx=4, pady=4, side="right")
 
         rowFrame = LabelFrame(self.window, text="ROI shape", padx=30, pady=10)
         rowFrame.pack(side="bottom", fill="x")
@@ -212,9 +211,9 @@ class App:
         Checkbutton(rowFrame, text='random ROI scale per frame', variable=self.custom, onvalue=1, offvalue=0, padx=15,
                     pady=10).pack()
 
-        self.updateWidget()
+        self.updateWidget(True)
 
-    def updateWidget(self):
+    def updateWidget(self, flag=False):
         """
         If new Roi was drawn, the child box
         + adds ROI coordinates
@@ -242,7 +241,8 @@ class App:
             label[i].pack(side="left")
 
         self.rowFrames.append(rowFrame)
-        self.window.mainloop()
+        if flag:
+            self.window.mainloop()
 
     def accept(self):
         """
@@ -253,40 +253,69 @@ class App:
         now = datetime.now()
         seed(now.hour + now.minute + now.second)
 
-        save_dir = Path('roi_saved')
-        if not save_dir.exists():
-            save_dir.mkdir(parents=True, exist_ok=True)  # make dir
-        save_js = str(save_dir / self.vidpath.rstrip('mp4'))
-        while Path(save_js + 'json').exists():
-            save_js += '_'
+        path = os.getcwd()
+        save_dir = os.path.join(path, 'roi_saved')
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)  # make dir
+        name, _ = os.path.splitext(os.path.basename(self.vidpath))
+        save_js = os.path.join(save_dir, name + '.json')
+        js = []
+        i = 1
+        while os.path.isfile(save_js):
+            save_js = os.path.normpath(save_js)[:-5] + '_' + str(i) + '.json'
+            i += 1
 
-        with open(save_js + 'json', 'w') as f:
-            for i, row in enumerate(self.rowFrames):
-                scale = choice((1.5, 1.7))
-                (x1, y1), (x2, y2) = self.roiRect[i]
-                json.dump({"ROI": self.roiRect[i],
-                           "interval": [int(row.winfo_children()[-3].get()) + 1,
-                                        int(row.winfo_children()[-1].get()) + 1]
-                           }, f)
+        for i, row in enumerate(self.rowFrames):
+            scale = choice((1.5, 1.7))
+            (x1, y1), (x2, y2) = self.roiRect[i]
+            js.append({"ROI": self.roiRect[i],
+                       "interval": [int(row.winfo_children()[-3].get()),
+                                    int(row.winfo_children()[-1].get())]
+                         })
 
-                w = int(scale * (x2 - x1))
-                h = int(scale * (y2 - y1))
-                x_bias = randint(0, min(x1, w - x2 + x1))
-                y_bias = randint(0, min(y1, h - y2 + y1))
-                top = y1 - y_bias + 3
-                left = x1 - x_bias + 3
-                # rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
-                #                                      roiRect[1][0] - roiRect[0][0],
-                #                                      roiRect[1][1] - roiRect[0][1],
-                rois.append("%i,%i,%i,%i%s^%s!%s" % (left, top, w, h, shape,
-                                                     int(row.winfo_children()[-3].get()) + 1,
-                                                     int(row.winfo_children()[-1].get()) + 1))
+            w = int(scale * (x2 - x1))
+            h = int(scale * (y2 - y1))
+            x_bias = randint(0, min(x1, w - x2 + x1))
+            y_bias = randint(0, min(y1, h - y2 + y1))
+            top = y1 - y_bias + 3
+            left = x1 - x_bias + 3
+            # rois.append("%i,%i,%i,%i%s^%s!%s" % (roiRect[0][0], roiRect[0][1],
+            #                                      roiRect[1][0] - roiRect[0][0],
+            #                                      roiRect[1][1] - roiRect[0][1],
+            rois.append("%i,%i,%i,%i%s^%s!%s" % (left, top, w, h, shape,
+                                                 int(row.winfo_children()[-3].get()) + 1,
+                                                 int(row.winfo_children()[-1].get()) + 1))
 
         rand = "pixel" in self.bg.get()
         static = "static" in self.bg.get()
+        with open(save_js, 'w') as f:
+            json.dump(js, f)
 
         roi_processing(self.vidpath, rois, self.fName.get(), rand=rand, static=static, color=None)
         self.end()
+
+    def download(self):
+        loadfile = askopenfilename()  # show an "Open" dialog box and return the path to the selected file
+        with open(loadfile, 'r') as f:
+            loadfile = json.load(f)
+        for row in self.rowFrames:
+            for widgets in row.winfo_children():
+                widgets.destroy()
+            row.destroy()
+        self.rowFrames = []
+        self.roiRect = []
+
+        if type(loadfile) != list:
+            loadfile = [loadfile]
+
+        for obj in loadfile:
+            self.roiRect.append(obj['ROI'])
+            self.updateWidget(False)
+            row = self.rowFrames[-1]
+            for j in (1, 3):
+                row.winfo_children()[-j].delete(0, 'end')
+                row.winfo_children()[-j].insert(0, obj['interval'][round((3-j)//2)])
+
 
     def trackbar(self, val):
         """
